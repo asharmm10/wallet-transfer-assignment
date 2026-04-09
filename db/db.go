@@ -63,6 +63,70 @@ func InitSchema() {
 	}
 
 	DB.Exec(`
+		DO $$
+		BEGIN
+			-- failure_reason column
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name='transfers' AND column_name='failure_reason'
+			) THEN
+				ALTER TABLE transfers ADD COLUMN failure_reason TEXT;
+			END IF;
+
+			-- fk_from_wallet
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE constraint_name='fk_from_wallet'
+			) THEN
+				ALTER TABLE transfers
+				ADD CONSTRAINT fk_from_wallet
+				FOREIGN KEY (from_wallet_id) REFERENCES wallets(id);
+			END IF;
+
+			-- fk_to_wallet
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE constraint_name='fk_to_wallet'
+			) THEN
+				ALTER TABLE transfers
+				ADD CONSTRAINT fk_to_wallet
+				FOREIGN KEY (to_wallet_id) REFERENCES wallets(id);
+			END IF;
+
+			-- wallet balance check
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE constraint_name='balance_non_negative'
+			) THEN
+				ALTER TABLE wallets
+				ADD CONSTRAINT balance_non_negative
+				CHECK (balance >= 0);
+			END IF;
+
+			-- amount check
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE constraint_name='amount_positive'
+			) THEN
+				ALTER TABLE transfers
+				ADD CONSTRAINT amount_positive
+				CHECK (amount > 0);
+			END IF;
+
+			-- status check
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE constraint_name='valid_status'
+			) THEN
+				ALTER TABLE transfers
+				ADD CONSTRAINT valid_status
+				CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED'));
+			END IF;
+
+		END $$;
+	`)
+
+	DB.Exec(`
 		INSERT INTO wallets (id, balance)
 		VALUES ('wallet_1', 1000), ('wallet_2', 500)
 		ON CONFLICT (id) DO NOTHING;
